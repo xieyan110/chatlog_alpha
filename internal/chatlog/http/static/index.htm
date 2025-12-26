@@ -597,9 +597,9 @@
                     if (files && files.length > 0) {
                         files.forEach(file => {
                             // Escape backslashes for JS string
-                            const escapedFile = file.replace(/\/g, '\\');
+                            const escapedFile = file.replace(/\\/g, '\\\\');
                             html += `<div class="db-item" onclick="openDBViewer('${group}', '${escapedFile}')">
-                                <span style="font-weight:bold;">📄 ${file.split(/[\/]/).pop()}</span>
+                                <span style="font-weight:bold;">📄 ${file.split(/[\\/]/).pop()}</span>
                                 <span class="text-gray text-sm" style="margin-left:auto;">${file}</span>
                             </div>`;
                         });
