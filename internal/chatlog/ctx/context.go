@@ -50,6 +50,8 @@ type Context struct {
 	// 自动解密
 	AutoDecrypt bool
 	LastSession time.Time
+	WalEnabled  bool
+	AutoDecryptDebounce int
 
 	// 当前选中的微信实例
 	Current *wechat.Account
@@ -103,6 +105,8 @@ func (c *Context) SwitchHistory(account string) {
 		c.WorkDir = history.WorkDir
 		c.HTTPEnabled = history.HTTPEnabled
 		c.HTTPAddr = history.HTTPAddr
+		c.WalEnabled = history.WalEnabled
+		c.AutoDecryptDebounce = history.AutoDecryptDebounce
 	} else {
 		c.Account = ""
 		c.Platform = ""
@@ -114,6 +118,8 @@ func (c *Context) SwitchHistory(account string) {
 		c.WorkDir = ""
 		c.HTTPEnabled = false
 		c.HTTPAddr = ""
+		c.WalEnabled = false
+		c.AutoDecryptDebounce = 0
 	}
 }
 
@@ -180,6 +186,18 @@ func (c *Context) GetVersion() int {
 
 func (c *Context) GetDataKey() string {
 	return c.DataKey
+}
+
+func (c *Context) GetWalEnabled() bool {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	return c.WalEnabled
+}
+
+func (c *Context) GetAutoDecryptDebounce() int {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	return c.AutoDecryptDebounce
 }
 
 func (c *Context) GetHTTPAddr() string {
@@ -260,6 +278,26 @@ func (c *Context) SetAutoDecrypt(enabled bool) {
 	c.UpdateConfig()
 }
 
+func (c *Context) SetWalEnabled(enabled bool) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.WalEnabled == enabled {
+		return
+	}
+	c.WalEnabled = enabled
+	c.UpdateConfig()
+}
+
+func (c *Context) SetAutoDecryptDebounce(debounce int) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.AutoDecryptDebounce == debounce {
+		return
+	}
+	c.AutoDecryptDebounce = debounce
+	c.UpdateConfig()
+}
+
 // 更新配置
 func (c *Context) UpdateConfig() {
 
@@ -275,6 +313,8 @@ func (c *Context) UpdateConfig() {
 		WorkDir:     c.WorkDir,
 		HTTPEnabled: c.HTTPEnabled,
 		HTTPAddr:    c.HTTPAddr,
+		WalEnabled:  c.WalEnabled,
+		AutoDecryptDebounce: c.AutoDecryptDebounce,
 	}
 
 	if c.conf.History == nil {

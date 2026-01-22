@@ -2,6 +2,7 @@ package decrypt
 
 import (
 	"context"
+	"hash"
 	"io"
 
 	"github.com/sjzar/chatlog/internal/errors"
@@ -24,6 +25,9 @@ type Decryptor interface {
 
 	// GetHMACSize 返回HMAC大小
 	GetHMACSize() int
+
+	GetHashFunc() func() hash.Hash
+	DeriveKeys(key []byte, salt []byte) ([]byte, []byte, error)
 
 	// GetVersion 返回解密器版本
 	GetVersion() string

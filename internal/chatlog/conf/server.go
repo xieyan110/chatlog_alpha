@@ -15,6 +15,8 @@ type ServerConfig struct {
 	WorkDir            string   `mapstructure:"work_dir"`
 	HTTPAddr           string   `mapstructure:"http_addr"`
 	AutoDecrypt        bool     `mapstructure:"auto_decrypt"`
+	WalEnabled         bool     `mapstructure:"wal_enabled"`
+	AutoDecryptDebounce int     `mapstructure:"auto_decrypt_debounce"`
 	SaveDecryptedMedia bool     `mapstructure:"save_decrypted_media"`
 	Webhook            *Webhook `mapstructure:"webhook"`
 }
@@ -49,6 +51,14 @@ func (c *ServerConfig) GetImgKey() string {
 
 func (c *ServerConfig) GetAutoDecrypt() bool {
 	return c.AutoDecrypt
+}
+
+func (c *ServerConfig) GetWalEnabled() bool {
+	return c.WalEnabled
+}
+
+func (c *ServerConfig) GetAutoDecryptDebounce() int {
+	return c.AutoDecryptDebounce
 }
 
 func (c *ServerConfig) GetHTTPAddr() string {

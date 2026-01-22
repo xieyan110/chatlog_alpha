@@ -39,22 +39,16 @@ func (d *Detector) FindProcesses() ([]*model.Process, error) {
 			continue
 		}
 
-		// v4 存在同名进程，需要继续判断 cmdline
-		if name == V4ProcessName {
-			cmdline, err := p.Cmdline()
-			if err != nil {
-				log.Err(err).Msg("获取进程命令行失败")
-				continue
-			}
-			if strings.Contains(cmdline, "--") {
-				continue
-			}
-		}
+		cmdline, cmdlineErr := p.Cmdline()
 
 		// 获取进程信息
 		procInfo, err := d.getProcessInfo(p)
 		if err != nil {
 			log.Err(err).Msgf("获取进程 %d 的信息失败", p.Pid)
+			continue
+		}
+
+		if cmdlineErr == nil && strings.Contains(cmdline, "--") && procInfo.DataDir == "" {
 			continue
 		}
 

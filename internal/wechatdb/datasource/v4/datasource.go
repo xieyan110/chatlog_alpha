@@ -34,32 +34,32 @@ const (
 var Groups = []*dbm.Group{
 	{
 		Name:      Message,
-		Pattern:   `^message_([0-9]?[0-9])?\.db$`,
+		Pattern:   `^message_([0-9]?[0-9])?\.db(-wal|-shm)?$`,
 		BlackList: []string{},
 	},
 	{
 		Name:      Contact,
-		Pattern:   `^contact\.db$`,
+		Pattern:   `^contact\.db(-wal|-shm)?$`,
 		BlackList: []string{},
 	},
 	{
 		Name:      Session,
-		Pattern:   `session\.db$`,
+		Pattern:   `^session\.db(-wal|-shm)?$`,
 		BlackList: []string{},
 	},
 	{
 		Name:      Media,
-		Pattern:   `^hardlink\.db$`,
+		Pattern:   `^hardlink\.db(-wal|-shm)?$`,
 		BlackList: []string{},
 	},
 	{
 		Name:      Voice,
-		Pattern:   `^media_([0-9]?[0-9])?\.db$`,
+		Pattern:   `^media_([0-9]?[0-9])?\.db(-wal|-shm)?$`,
 		BlackList: []string{},
 	},
 	{
 		Name:      SNS,
-		Pattern:   `^sns\.db$`,
+		Pattern:   `^sns\.db(-wal|-shm)?$`,
 		BlackList: []string{},
 	},
 }
@@ -79,11 +79,11 @@ type DataSource struct {
 	messageInfos []MessageDBInfo
 }
 
-func New(path string) (*DataSource, error) {
+func New(path string, walEnabled bool) (*DataSource, error) {
 
 	ds := &DataSource{
 		path:         path,
-		dbm:          dbm.NewDBManager(path),
+		dbm:          dbm.NewDBManager(path, walEnabled),
 		messageInfos: make([]MessageDBInfo, 0),
 	}
 

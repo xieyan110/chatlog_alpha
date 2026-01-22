@@ -15,7 +15,7 @@ func TestXxx(t *testing.T) {
 		BlackList: []string{},
 	}
 
-	d := NewDBManager(path)
+	d := NewDBManager(path, false)
 	d.AddGroup(g)
 	d.Start()
 

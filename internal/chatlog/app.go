@@ -3,6 +3,7 @@ package chatlog
 import (
 	"fmt"
 	"path/filepath"
+	"strconv"
 	"time"
 
 	"github.com/rs/zerolog/log"
@@ -141,11 +142,13 @@ func (a *App) refresh() {
 		case <-a.stopRefresh:
 			return
 		case <-tick.C:
+			var processErr error
 			// 如果当前账号为空，尝试查找微信进程
 			if a.ctx.Current == nil {
 				// 获取微信实例
-				instances := a.m.wechat.GetWeChatInstances()
-				if len(instances) > 0 {
+				instances, err := a.m.wechat.GetWeChatInstancesWithError()
+				processErr = err
+				if err == nil && len(instances) > 0 {
 					// 找到微信进程，设置第一个为当前账号
 					a.ctx.SwitchCurrent(instances[0])
 					log.Info().Msgf("检测到微信进程，PID: %d，已设置为当前账号", instances[0].PID)
@@ -168,7 +171,11 @@ func (a *App) refresh() {
 			}
 			a.infoBar.UpdateAccount(a.ctx.Account)
 			a.infoBar.UpdateBasicInfo(a.ctx.PID, a.ctx.FullVersion, a.ctx.ExePath)
-			a.infoBar.UpdateStatus(a.ctx.Status)
+			statusText := a.ctx.Status
+			if a.ctx.PID == 0 && processErr != nil {
+				statusText = fmt.Sprintf("[red]获取进程失败: %v[white]", processErr)
+			}
+			a.infoBar.UpdateStatus(statusText)
 			a.infoBar.UpdateDataKey(a.ctx.DataKey)
 			a.infoBar.UpdateImageKey(a.ctx.ImgKey)
 			a.infoBar.UpdatePlatform(a.ctx.Platform)
@@ -182,10 +189,19 @@ func (a *App) refresh() {
 			} else {
 				a.infoBar.UpdateHTTPServer("[未启动]")
 			}
+			autoDecryptText := "[未开启]"
 			if a.ctx.AutoDecrypt {
-				a.infoBar.UpdateAutoDecrypt("[green][已开启][white]")
+				if a.ctx.AutoDecryptDebounce > 0 {
+					autoDecryptText = fmt.Sprintf("[green][已开启][white] %dms", a.ctx.AutoDecryptDebounce)
+				} else {
+					autoDecryptText = "[green][已开启][white]"
+				}
+			}
+			a.infoBar.UpdateAutoDecrypt(autoDecryptText)
+			if a.ctx.WalEnabled {
+				a.infoBar.UpdateWal("[green][已启用][white]")
 			} else {
-				a.infoBar.UpdateAutoDecrypt("[未开启]")
+				a.infoBar.UpdateWal("[未启用]")
 			}
 
 			// Update latest message in footer
@@ -602,6 +618,16 @@ func (a *App) settingSelected(i *menu.Item) {
 			description: "配置微信数据文件所在目录",
 			action:      a.settingDataDir,
 		},
+		{
+			name:        "启用 WAL 支持",
+			description: "同步并监控 .db-wal/.db-shm 文件",
+			action:      a.settingWalEnabled,
+		},
+		{
+			name:        "设置自动解密去抖",
+			description: "配置自动解密触发间隔(ms)",
+			action:      a.settingAutoDecryptDebounce,
+		},
 	}
 
 	subMenu := menu.NewSubMenu("设置")
@@ -749,6 +775,80 @@ func (a *App) settingDataDir() {
 		a.ctx.DataDir = tempDataDir // 设置数据目录
 		a.mainPages.RemovePage("submenu2")
 		a.showInfo("数据目录已设置为 " + a.ctx.DataDir)
+	})
+
+	formView.AddButton("取消", func() {
+		a.mainPages.RemovePage("submenu2")
+	})
+
+	a.mainPages.AddPage("submenu2", formView, true, true)
+	a.SetFocus(formView)
+}
+
+func (a *App) settingWalEnabled() {
+	formView := form.NewForm("设置 WAL 支持")
+
+	tempWalEnabled := a.ctx.WalEnabled
+
+	formView.AddCheckbox("启用 WAL 支持", tempWalEnabled, func(checked bool) {
+		tempWalEnabled = checked
+	})
+
+	formView.AddButton("保存", func() {
+		a.ctx.SetWalEnabled(tempWalEnabled)
+		a.mainPages.RemovePage("submenu2")
+		if tempWalEnabled {
+			a.showInfo("WAL 支持已开启")
+		} else {
+			a.showInfo("WAL 支持已关闭")
+		}
+	})
+
+	formView.AddButton("取消", func() {
+		a.mainPages.RemovePage("submenu2")
+	})
+
+	a.mainPages.AddPage("submenu2", formView, true, true)
+	a.SetFocus(formView)
+}
+
+func (a *App) settingAutoDecryptDebounce() {
+	formView := form.NewForm("设置自动解密去抖")
+
+	tempDebounceText := ""
+	if a.ctx.AutoDecryptDebounce > 0 {
+		tempDebounceText = strconv.Itoa(a.ctx.AutoDecryptDebounce)
+	}
+
+	formView.AddInputField("去抖时长(ms)", tempDebounceText, 0, func(textToCheck string, lastChar rune) bool {
+		if textToCheck == "" {
+			return true
+		}
+		for _, r := range textToCheck {
+			if r < '0' || r > '9' {
+				return false
+			}
+		}
+		return true
+	}, func(text string) {
+		tempDebounceText = text
+	})
+
+	formView.AddButton("保存", func() {
+		if tempDebounceText == "" {
+			a.ctx.SetAutoDecryptDebounce(0)
+			a.mainPages.RemovePage("submenu2")
+			a.showInfo("已恢复默认去抖时长")
+			return
+		}
+		value, err := strconv.Atoi(tempDebounceText)
+		if err != nil {
+			a.showError(fmt.Errorf("去抖时长必须为数字"))
+			return
+		}
+		a.ctx.SetAutoDecryptDebounce(value)
+		a.mainPages.RemovePage("submenu2")
+		a.showInfo(fmt.Sprintf("去抖时长已设置为 %dms", value))
 	})
 
 	formView.AddButton("取消", func() {

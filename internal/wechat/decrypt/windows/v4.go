@@ -65,6 +65,14 @@ func (d *V4Decryptor) deriveKeys(key []byte, salt []byte) ([]byte, []byte) {
 	return encKey, macKey
 }
 
+func (d *V4Decryptor) DeriveKeys(key []byte, salt []byte) ([]byte, []byte, error) {
+	if len(key) != common.KeySize {
+		return nil, nil, errors.ErrKeyLengthMust32
+	}
+	encKey, macKey := d.deriveKeys(key, salt)
+	return encKey, macKey, nil
+}
+
 // Validate 验证密钥是否有效
 func (d *V4Decryptor) Validate(page1 []byte, key []byte) bool {
 	if len(page1) < d.pageSize || len(key) != common.KeySize {
@@ -181,6 +189,10 @@ func (d *V4Decryptor) GetReserve() int {
 // GetHMACSize 返回HMAC大小
 func (d *V4Decryptor) GetHMACSize() int {
 	return d.hmacSize
+}
+
+func (d *V4Decryptor) GetHashFunc() func() hash.Hash {
+	return d.hashFunc
 }
 
 // GetVersion 返回解密器版本

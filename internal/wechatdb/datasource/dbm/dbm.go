@@ -2,8 +2,11 @@ package dbm
 
 import (
 	"database/sql"
+	"io"
+	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"sync"
 	"time"
 
@@ -17,23 +20,25 @@ import (
 )
 
 type DBManager struct {
-	path    string
-	id      string
-	fm      *filemonitor.FileMonitor
-	fgs     map[string]*filemonitor.FileGroup
-	dbs     map[string]*sql.DB
-	dbPaths map[string][]string
-	mutex   sync.RWMutex
+	path       string
+	id         string
+	walEnabled bool
+	fm         *filemonitor.FileMonitor
+	fgs        map[string]*filemonitor.FileGroup
+	dbs        map[string]*sql.DB
+	dbPaths    map[string][]string
+	mutex      sync.RWMutex
 }
 
-func NewDBManager(path string) *DBManager {
+func NewDBManager(path string, walEnabled bool) *DBManager {
 	return &DBManager{
-		path:    path,
-		id:      filepath.Base(path),
-		fm:      filemonitor.NewFileMonitor(),
-		fgs:     make(map[string]*filemonitor.FileGroup),
-		dbs:     make(map[string]*sql.DB),
-		dbPaths: make(map[string][]string),
+		path:       path,
+		id:         filepath.Base(path),
+		walEnabled: walEnabled,
+		fm:         filemonitor.NewFileMonitor(),
+		fgs:        make(map[string]*filemonitor.FileGroup),
+		dbs:        make(map[string]*sql.DB),
+		dbPaths:    make(map[string][]string),
 	}
 }
 
@@ -103,7 +108,7 @@ func (d *DBManager) GetDBPath(name string) ([]string, error) {
 		if len(list) == 0 {
 			return nil, errors.DBFileNotFound(d.path, fg.PatternStr, nil)
 		}
-		dbPaths = list
+		dbPaths = filterPrimaryDBs(list)
 		d.mutex.Lock()
 		d.dbPaths[name] = dbPaths
 		d.mutex.Unlock()
@@ -126,6 +131,12 @@ func (d *DBManager) OpenDB(path string) (*sql.DB, error) {
 			log.Err(err).Msgf("获取临时拷贝文件 %s 失败", path)
 			return nil, err
 		}
+		if d.walEnabled {
+			if err := d.syncWalFiles(path, tempPath); err != nil {
+				log.Err(err).Msgf("同步 WAL 文件失败: %s", path)
+				return nil, err
+			}
+		}
 	}
 	db, err = sql.Open("sqlite3", tempPath)
 	if err != nil {
@@ -139,18 +150,22 @@ func (d *DBManager) OpenDB(path string) (*sql.DB, error) {
 }
 
 func (d *DBManager) Callback(event fsnotify.Event) error {
-	if !event.Op.Has(fsnotify.Create) {
+	if !(event.Op.Has(fsnotify.Create) || event.Op.Has(fsnotify.Write) || event.Op.Has(fsnotify.Rename)) {
 		return nil
 	}
 
+	basePath := normalizeDBPath(event.Name)
 	d.mutex.Lock()
-	db, ok := d.dbs[event.Name]
+	db, ok := d.dbs[basePath]
 	if ok {
-		delete(d.dbs, event.Name)
+		delete(d.dbs, basePath)
 		go func(db *sql.DB) {
 			time.Sleep(time.Second * 5)
 			db.Close()
 		}(db)
+	}
+	if (event.Op.Has(fsnotify.Create) || event.Op.Has(fsnotify.Rename)) && isPrimaryDBFile(event.Name) {
+		d.dbPaths = make(map[string][]string)
 	}
 	d.mutex.Unlock()
 
@@ -170,4 +185,77 @@ func (d *DBManager) Close() error {
 		db.Close()
 	}
 	return d.fm.Stop()
+}
+
+func (d *DBManager) syncWalFiles(dbPath, tempPath string) error {
+	if err := syncAuxFile(dbPath+"-wal", tempPath+"-wal"); err != nil {
+		return err
+	}
+	if err := syncAuxFile(dbPath+"-shm", tempPath+"-shm"); err != nil {
+		return err
+	}
+	return nil
+}
+
+func syncAuxFile(src, dst string) error {
+	if _, err := os.Stat(src); err != nil {
+		if os.IsNotExist(err) {
+			if err := os.Remove(dst); err != nil && !os.IsNotExist(err) {
+				return err
+			}
+			return nil
+		}
+		return err
+	}
+	return copyFileAtomic(src, dst)
+}
+
+func copyFileAtomic(src, dst string) error {
+	input, err := os.Open(src)
+	if err != nil {
+		return err
+	}
+	defer input.Close()
+
+	temp := dst + ".tmp"
+	output, err := os.Create(temp)
+	if err != nil {
+		return err
+	}
+	if _, err := io.Copy(output, input); err != nil {
+		output.Close()
+		os.Remove(temp)
+		return err
+	}
+	if err := output.Sync(); err != nil {
+		output.Close()
+		os.Remove(temp)
+		return err
+	}
+	if err := output.Close(); err != nil {
+		os.Remove(temp)
+		return err
+	}
+	return os.Rename(temp, dst)
+}
+
+func normalizeDBPath(path string) string {
+	if strings.HasSuffix(path, "-wal") || strings.HasSuffix(path, "-shm") {
+		return strings.TrimSuffix(strings.TrimSuffix(path, "-wal"), "-shm")
+	}
+	return path
+}
+
+func isPrimaryDBFile(path string) bool {
+	return strings.HasSuffix(path, ".db") && !strings.HasSuffix(path, ".db-wal") && !strings.HasSuffix(path, ".db-shm")
+}
+
+func filterPrimaryDBs(paths []string) []string {
+	result := make([]string, 0, len(paths))
+	for _, path := range paths {
+		if isPrimaryDBFile(path) {
+			result = append(result, path)
+		}
+	}
+	return result
 }

@@ -157,6 +157,13 @@ func New() *InfoBar {
 	)
 	table.SetCell(autoDecryptRow, valueCol1, tview.NewTableCell(""))
 
+	table.SetCell(
+		autoDecryptRow,
+		labelCol2,
+		tview.NewTableCell(fmt.Sprintf(" [%s::]%s", headerColor, "WAL:")),
+	)
+	table.SetCell(autoDecryptRow, valueCol2, tview.NewTableCell(""))
+
 	// infobar
 	infoBar := &InfoBar{
 		Box:   tview.NewBox(),
@@ -215,6 +222,10 @@ func (info *InfoBar) UpdateImageKey(key string) {
 // UpdateAutoDecrypt updates Auto Decrypt value.
 func (info *InfoBar) UpdateAutoDecrypt(text string) {
 	info.table.GetCell(autoDecryptRow, valueCol1).SetText(text)
+}
+
+func (info *InfoBar) UpdateWal(text string) {
+	info.table.GetCell(autoDecryptRow, valueCol2).SetText(text)
 }
 
 // Draw draws this primitive onto the screen.

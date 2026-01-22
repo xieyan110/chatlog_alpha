@@ -51,10 +51,10 @@ type DataSource interface {
 	Close() error
 }
 
-func New(path string, platform string, version int) (DataSource, error) {
+func New(path string, platform string, version int, walEnabled bool) (DataSource, error) {
 	switch {
 	case platform == "windows" && version == 4:
-		return v4.New(path)
+		return v4.New(path, walEnabled)
 	default:
 		return nil, errors.PlatformUnsupported(platform, version)
 	}

@@ -33,6 +33,7 @@ type Config interface {
 	GetPlatform() string
 	GetVersion() int
 	GetWebhook() *conf.Webhook
+	GetWalEnabled() bool
 }
 
 func NewService(conf Config) *Service {
@@ -43,7 +44,7 @@ func NewService(conf Config) *Service {
 }
 
 func (s *Service) Start() error {
-	db, err := wechatdb.New(s.conf.GetWorkDir(), s.conf.GetPlatform(), s.conf.GetVersion())
+	db, err := wechatdb.New(s.conf.GetWorkDir(), s.conf.GetPlatform(), s.conf.GetVersion(), s.conf.GetWalEnabled())
 	if err != nil {
 		return err
 	}

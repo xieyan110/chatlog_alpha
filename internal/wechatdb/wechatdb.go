@@ -13,19 +13,21 @@ import (
 )
 
 type DB struct {
-	path     string
-	platform string
-	version  int
-	ds       datasource.DataSource
-	repo     *repository.Repository
+	path       string
+	platform   string
+	version    int
+	walEnabled bool
+	ds         datasource.DataSource
+	repo       *repository.Repository
 }
 
-func New(path string, platform string, version int) (*DB, error) {
+func New(path string, platform string, version int, walEnabled bool) (*DB, error) {
 
 	w := &DB{
-		path:     path,
-		platform: platform,
-		version:  version,
+		path:       path,
+		platform:   platform,
+		version:    version,
+		walEnabled: walEnabled,
 	}
 
 	// 初始化，加载数据库文件信息
@@ -45,7 +47,7 @@ func (w *DB) Close() error {
 
 func (w *DB) Initialize() error {
 	var err error
-	w.ds, err = datasource.New(w.path, w.platform, w.version)
+	w.ds, err = datasource.New(w.path, w.platform, w.version, w.walEnabled)
 	if err != nil {
 		return err
 	}
